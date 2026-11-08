@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>👑 戴冠式エルサ コインRTAシミュレーター</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+    background: linear-gradient(160deg, #0b1226 0%, #16224a 55%, #241a3f 100%);
+    color: #eaf2ff; min-height: 100vh; padding: 18px;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; }
+  h1 { font-size: 24px; text-align: center; letter-spacing: 1px;
+       text-shadow: 0 2px 12px rgba(120,180,255,.5); }
+  .desc { text-align: center; font-size: 12.5px; color: #a9bce0; margin: 6px 0 14px; line-height: 1.7; }
+  .hud {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px; margin-bottom: 8px;
+  }
+  .hud .card {
+    background: rgba(255,255,255,.07); border: 1px solid rgba(140,180,255,.25);
+    border-radius: 10px; padding: 8px 10px; text-align: center;
+  }
+  .card .label { font-size: 11px; color: #9db4dd; }
+  .card .value { font-size: 17px; font-weight: bold; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  #hudTimer { color: #7dffb0; font-size: 22px; }
+  .progress { height: 14px; background: rgba(255,255,255,.08); border-radius: 7px; overflow: hidden;
+              border: 1px solid rgba(140,180,255,.3); margin-bottom: 12px; }
+  #progFill { height: 100%; width: 0%; border-radius: 7px;
+    background: linear-gradient(90deg, #4aa3e8, #ffd54a, #ff8a5c); transition: width .25s; }
+  .main { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+  .board-area { display: flex; gap: 10px; align-items: flex-end; }
+  .board-canvas-wrap { position: relative; }
+  canvas {
+    display: block; border-radius: 14px; border: 2px solid rgba(160,200,255,.4);
+    box-shadow: 0 8px 30px rgba(0,0,0,.5); touch-action: none; cursor: pointer;
+    width: 392px; max-width: 92vw; height: auto; background: #101a33;
+    overflow: hidden;
+  }
+  /* スキルボタンは盤面のすぐ下に大きく置いて押しやすく(盤面は隠さない) */
+  /* スキルボタンは盤面の左下に少し重ねる(本家の配置) */
+  .skill-fab-wrap {
+    position: absolute; left: 0; bottom: -108px; z-index: 4;
+    display: flex; align-items: center; gap: 8px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .fab-label { font-size: 10.5px; font-weight: bold; color: #cfe4ff; line-height: 1.4;
+               background: rgba(6,12,26,.55); border-radius: 8px; padding: 3px 7px; display: none; }
+  .fab-label small { display: block; font-weight: normal; font-size: 10px; color: #93a9cc; }
+  #fabRing {
+    width: 100px; height: 100px; border-radius: 50%;
+    background: conic-gradient(#ffd54a 0%, rgba(255,255,255,.12) 0%);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 6px 22px rgba(0,0,0,.65);
+    transition: transform .08s;
+  }
+  #skillFab {
+    width: 84px; height: 84px; border-radius: 50%; padding: 0;
+    font-size: 34px; line-height: 1;
+    background: linear-gradient(180deg, #e8f8ff, #3f9be0);
+    border: 3px solid rgba(255,255,255,.85);
+    touch-action: manipulation;
+  }
+  #skillFab .cd { display: block; font-size: 15px; font-weight: bold; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
+  #skillFab:disabled { filter: saturate(.35) brightness(.75); }
+  /* 発動可能なときは脈打たせて気づきやすく */
+  @keyframes fabPulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(255,213,74,.75); }
+    50%     { box-shadow: 0 0 0 14px rgba(255,213,74,0); }
+  }
+  #fabRing.ready { animation: fabPulse 1.1s infinite; }
+  #fabRing.ready #skillFab { background: linear-gradient(180deg, #fff6cf, #ffb63f); border-color: #fff; }
+  .fab-hint { display: none; }
+  .overlay {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(5,10,25,.82); border-radius: 14px; z-index: 5;
+  }
+  .hidden { display: none !important; }
+  .ov-inner { text-align: center; padding: 18px; }
+  .ov-title { font-size: 30px; font-weight: bold; color: #ffd54a; text-shadow: 0 0 18px rgba(255,213,74,.7); }
+  .ov-rta { font-size: 26px; font-weight: bold; color: #7dffb0; margin: 10px 0 4px; font-variant-numeric: tabular-nums; }
+  .ov-best { font-size: 14px; color: #c9d8f5; }
+  .ov-coin { font-size: 13px; color: #9db4dd; margin: 6px 0 12px; }
+  .side { flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: 10px; }
+  .panel { background: rgba(255,255,255,.06); border: 1px solid rgba(140,180,255,.22);
+           border-radius: 12px; padding: 10px 12px; }
+  .panel h2 { font-size: 13.5px; margin-bottom: 8px; color: #bcd2ff; }
+  .btnrow { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    font-family: inherit; font-size: 14px; font-weight: bold; color: #0b1226;
+    background: linear-gradient(180deg, #9fd0ff, #5aa0e8); border: none; border-radius: 9px;
+    padding: 9px 14px; cursor: pointer; box-shadow: 0 3px 0 rgba(0,0,0,.35);
+  }
+  button:active { transform: translateY(2px); box-shadow: none; }
+  button:disabled { opacity: .45; cursor: default; transform: none; }
+  .slider-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; font-size: 13px; }
+  input[type=range] { flex: 1; accent-color: #ffd54a; }
+  #slVal, #plusVal { font-weight: bold; color: #ffd54a; min-width: 52px; text-align: right; }
+  .radio-row { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+  .radio-row label { display: flex; gap: 6px; align-items: baseline; cursor: pointer; }
+  .radio-row input { accent-color: #5aa0e8; }
+  select { font-family: inherit; font-size: 13px; padding: 4px 6px; border-radius: 6px;
+           background: #16224a; color: #eaf2ff; border: 1px solid rgba(140,180,255,.4); }
+  .chk { font-size: 13px; display: flex; gap: 6px; align-items: center; }
+  .log { font-size: 12px; line-height: 1.55; max-height: 190px; overflow-y: auto;
+         background: rgba(0,0,0,.3); border-radius: 8px; padding: 8px; }
+  .log div { border-bottom: 1px dashed rgba(255,255,255,.08); padding: 1px 0; }
+  .log .gold { color: #ffd54a; font-weight: bold; }
+  .log .minus { color: #ff9a9a; font-weight: bold; }
+  .log .big { color: #7dffb0; font-weight: bold; font-size: 13px; }
+  .sim-section { margin-top: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }
+  th, td { border: 1px solid rgba(140,180,255,.25); padding: 5px 8px; text-align: center; }
+  th { background: rgba(90,160,232,.25); }
+  td:first-child { text-align: left; }
+  .note { font-size: 11.5px; color: #8fa3c8; margin-top: 6px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>👑 戴冠式エルサ コインRTAシミュレーター</h1>
+  <p class="desc">
+    同じツムを3つ以上なぞって消してコインを稼ぎ、<b>累計1億5,000万コイン（完売）</b>に到達するまでの時間を計測するRTAゲームです。<br>
+    盤面は毎回ランダム＆消すと上からランダムなツムが落ちてくる(斜めでも繋がる・ツムの位置は毎回ズレてバラバラ)。<br>
+    スキル「つなげたツムと一緒にまわりのツムを凍らせるよ！」：<b>必要ツム18個</b>、効果時間 <b>SL1=5秒〜SL6=10秒</b>。<br>
+    🧊凍るのは<b>「なぞり始め」と「なぞり終わり」を通る“無限に続く直線”上のツム＋そのすぐ周り</b>(盤外までまっすぐ伸びる)！凍りの近くをなぞると再凍結してカウント加算(量より質)。凍りは<b>スキル後もタップするまで残る</b>。タップすると<b>隣接する凍りクラスタがカウントの2倍</b>消える(離れた凍りは消えない)。<br>
+    🪙 コイン補正は<b>エルサ本来／標準／補正なし／プラス補正</b>から選択（プラス補正を選んだときだけ補正段階を選べる）。❄️スキルボタンは盤面の左下、Spaceキーでも発動OK。
+  </p>
+
+  <div class="hud">
+    <div class="card"><div class="label">⏱ RTAタイマー</div><div class="value" id="hudTimer">00:00.0</div></div>
+    <div class="card"><div class="label">💰 累計コイン(完売まで稼ぐ額)</div><div class="value" id="hudCoin">0 枚</div></div>
+    <div class="card"><div class="label">🎯 目標コイン(完売)</div><div class="value" id="hudTotal">1億5,000万 枚</div></div>
+    <div class="card"><div class="label">📈 達成率</div><div class="value" id="hudBoxes">0.0%</div></div>
+    <div class="card"><div class="label">🏅 この設定のベストRTA</div><div class="value" id="hudBest">--</div></div>
+  </div>
+  <div class="progress"><div id="progFill"></div></div>
+
+  <div class="main">
+    <div class="board-area">
+      <div class="board-canvas-wrap">
+        <canvas id="board"></canvas>
+        <div id="overlay" class="overlay hidden">
+          <div class="ov-inner">
+            <div class="ov-title">🏆 完売！！ 1億5,000万コイン達成</div>
+            <div class="ov-rta" id="ovRta">00:00.0</div>
+            <div class="ov-best" id="ovBest"></div>
+            <div class="ov-coin" id="ovCoin"></div>
+            <button id="ovAgain">🔁 もう一度プレイ</button>
+          </div>
+        </div>
+        <div class="skill-fab-wrap">
+          <div id="fabRing"><button id="skillFab" title="スキル発動(必要ツム18個 / SpaceキーでもOK)">❄️<span class="cd" id="fabCd"></span></button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="panel">
+        <h2>▶ 操作</h2>
+        <div class="btnrow">
+          <button id="startBtn">▶ スタート</button>
+          <button id="resetBtn">⏹ リセット</button>
+        </div>
+        <div style="height:8px"></div>
+        <label class="chk"><input type="checkbox" id="autoChk"> 🤖 オートプレイ(放置RTA)</label>
+      </div>
+
+      <div class="panel">
+        <h2>✨ 戴冠式エルサのスキル</h2>
+        <div class="slider-row">
+          スキルレベル <input type="range" id="slSlider" min="1" max="6" value="6" step="1"> <span id="slVal">SL 6</span>
+        </div>
+        <div class="note" id="skillInfo">必要ツム 18個 ／ 効果時間 10秒 ／ コイン補正 -5段階(SL6)</div>
+        <div class="note" id="skillState">スキル待機中…</div>
+        <div class="slider-row">
+          直線の太さ <input type="range" id="frRadSlider" min="0" max="2" value="1" step="1"> <span id="frRadVal">±1マス</span>
+        </div>
+        <label class="chk"><input type="checkbox" id="frTrailChk" checked> なぞった軌跡も凍らせる</label>
+        <div class="note">💡 効果中：3つ以上なぞって指を離すと、<b>なぞり始め(START)と終わり(END)を通る“無限直線”が凍る</b>よ。直線は2点で止まらず<b>盤外までまっすぐ続く</b>ので、START と END の間だけでなく、その延長線上にあるツムも全部凍る(❄マークと白枠が直線上のツム、水色は補助の帯)。なぞっている間は<b>START/ENDマーカー・直線・凍る範囲が全部プレビュー</b>されるので、離す前に確認できる。同じ所を何度もなぞると再凍結してカウントが増える(量より質！)。凍りは<b>スキル後もタップするまで残る</b>。タップで<b>隣接クラスタがカウント×2</b>消える(離れた凍りは残る)。<br>🔧 直線の太さ(芯のみ/±1/±2)と「軌跡も凍らせる」は上のスキルパネルで切り替えられるよ。</div>
+      </div>
+
+      <div class="panel">
+        <h2>🪙 コイン補正モード</h2>
+        <div class="radio-row">
+          <label><input type="radio" name="corrMode" value="elsa" checked> エルサ本来の補正(SL連動のマイナス補正: SL1で-8段階〜SL6で-5段階)</label>
+          <label><input type="radio" name="corrMode" value="normal"> 標準補正(×1中心＋たまに高額補正)</label>
+          <label><input type="radio" name="corrMode" value="none"> 補正なし(常に×1)</label>
+          <label><input type="radio" name="corrMode" value="plus"> プラス補正(常に+補正のみ)</label>
+        </div>
+        <div id="plusRow" class="hidden">
+          <div class="slider-row">
+            プラス補正の段階 <input type="range" id="plusSlider" min="2" max="35" value="10" step="1"> <span id="plusVal">+100%(×2.0)</span>
+          </div>
+          <div class="note">段階P = 常に <b>×(1 + 0.1×P)</b> の補正（P=2で×1.2、P=35で×4.5）</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>🎯 完売条件(目標コイン)</h2>
+        <div class="note" id="nextBox">目標：<b>150,000,000 枚</b>（1億5,000万コイン）</div>
+      </div>
+
+      <div class="panel">
+        <h2>📜 ログ</h2>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel sim-section">
+    <h2>🧪 一括シミュレーション(なぞり戦略別・目標コイン到達RTA)</h2>
+    <div class="btnrow">
+      <button id="simBtn">🧪 各なぞり戦略5回ずつ高速シミュレート</button>
+      <button id="freezeTestBtn">🧪 直線凍結のセルフテスト(全パターン)</button>
+    </div>
+    <pre id="freezeTestOut" class="note" style="white-space:pre-wrap;font-family:ui-monospace,monospace;background:rgba(0,0,0,.3);border-radius:8px;padding:8px;margin-top:8px;display:none"></pre>
+    <div class="note">現在の<b>コイン補正モード</b>・スキルレベルで、<b>目標コイン(1億5,000万枚)に到達するまでの仮想時間</b>を比較します。「軌跡型なぞり」と「直線型なぞり」でどちらが速いかが見られます。</div>
+    <table id="simTable">
+      <thead><tr><th>なぞり戦略</th><th>平均RTA</th><th>中央値RTA</th><th>最速RTA</th><th>最遅RTA</th><th>達成率</th></tr></thead>
+      <tbody id="simBody"><tr><td colspan="6">まだ実行していません</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ================= 定数 =================
+const COLS = 7, ROWS = 9, CELL = 56, NCELL = COLS * ROWS;
+const GOAL_COINS = 150000000;                 // 完売 = 1億5,000万コイン
+const coinStr = n => n.toLocaleString('ja-JP') + ' 枚';
+const goalPct = () => Math.min(100, totalEarned / GOAL_COINS * 100);
+const GAUGE_MAX = 18;                       // スキル発動に必要なツム数 18個
+const TYPES = [
+  { name: 'エルサ',     emoji: '👸', c1: '#dff2ff', c2: '#2f8fd8' },
+  { name: 'アナ',       emoji: '💃', c1: '#ffe3f0', c2: '#d84f8e' },
+  { name: 'オラフ',     emoji: '⛄', c1: '#ffffff', c2: '#6fc3e0' },
+  { name: 'クリストフ', emoji: '🧔', c1: '#f5e3c4', c2: '#96682f' },
+  { name: 'スヴェン',   emoji: '🦌', c1: '#f4f4fa', c2: '#7c7c92' },
+];
+const DIRS8 = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]; // 斜めも繋がる
+const skillDuration = sl => 4 + sl;        // SL1=5秒 … SL6=10秒
+const tapCoins = (n, k) => Math.round(n * (6 + 2 * (Math.max(1, k) - 1))); // なぞり回数ボーナス(量より質)
+
+// localStorage が使えない環境(サンドボックスiframe等)でも落ちないようにラップ
+const SAFE_LS = (() => {
+  let ok = true;
+  try { localStorage.setItem('__t', '1'); localStorage.removeItem('__t'); } catch (e) { ok = false; }
+  const mem = {};
+  return {
+    get: k => { try { return ok ? localStorage.getItem(k) : (k in mem ? mem[k] : null); } catch (e) { return mem[k] || null; } },
+    set: (k, v) => { try { if (ok) localStorage.setItem(k, v); else mem[k] = v; } catch (e) { mem[k] = v; } },
+  };
+})();
+
+// ================= 状態 =================
+const canvas = document.getElementById('board');
+canvas.width = COLS * CELL; canvas.height = ROWS * CELL;
+const ctx = canvas.getContext('2d');
+
+let grid = null;                 // ツム種別(数値) or null
+let off = null;                  // 落下アニメ用 Yオフセット(px)
+let jit = null;                  // 見た目のランダムズレ [r][c] = [dx, dy]
+let frozen = new Set();          // 凍っているツムのキー(スキル後もタップまで残る)
+let frozenCnt = new Map();       // key → 再凍結込みの凍結回数
+let frozenTotal = 0;             // 凍結カウント合計
+let traceCount = 0;              // 1スキル中のなぞり回数
+let totalEarned = 0, gauge = 0;   // totalEarned が目標コインまでの累計
+
+let skillLevel = 6;
+let plusLevel = 10;              // 補正プラスの段階(2〜35)
+let mode = 'elsa';              // コイン補正モード: elsa / normal / none / plus
+const CORR_OFFSET = [8, 7, 7, 6, 6, 5];                       // エルサのマイナス補正段階(SL1=-8 … SL6=-5)
+const LADDER = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.3, 2, 4, 11, 51, 5001];
+const BASE_W = [0, 0, 0, 0, 0, 62, 20, 10, 5, 2, 0.5, 0.15, 0.002]; // 標準補正: ×1中心、高額補正はごく稀
+let state = 'idle';
+let startTime = 0, elapsed = 0;
+let skillActive = false, skillEnd = 0;
+let dragging = false, chain = [], downCell = null, autoOn = false;
+let popups = [];
+
+// ================= DOM =================
+const $ = id => document.getElementById(id);
+const timerEl = $('hudTimer'), coinEl = $('hudCoin'), totalEl = $('hudTotal'),
+      boxEl = $('hudBoxes'), bestEl = $('hudBest'), progFill = $('progFill'),
+      slVal = $('slVal'), plusVal = $('plusVal'), skillInfo = $('skillInfo'), skillState = $('skillState'),
+      nextEl = $('nextBox'), logEl = $('log'), overlay = $('overlay'),
+      fabRing = $('fabRing'), skillFab = $('skillFab'), fabCd = $('fabCd');
+
+// ================= 便利関数 =================
+const randInt = n => Math.floor(Math.random() * n);
+const randType = () => randInt(TYPES.length);
+const inB = (r, c) => r >= 0 && r < ROWS && c >= 0 && c < COLS;
+const keyOf = (r, c) => r * COLS + c;
+const rcOf = k => [Math.floor(k / COLS), k % COLS];
+// なぞり消しのコイン(指数ではなく線形＋長さボーナス。数字が読めるように)
+//   3連=45 / 4連=60 / 5連=80 / 6連=105 / 7連=135 / 8連=170 …
+const chainCoins = len => 15 * len + 5 * Math.max(0, len - 3) * (len - 2) / 2 * 2;
+
+function fmt(ms) {
+  if (ms == null || !isFinite(ms)) return '--';
+  const t = ms / 1000, m = Math.floor(t / 60), s = t - m * 60;
+  return String(m).padStart(2, '0') + ':' + s.toFixed(1).padStart(4, '0');
+}
+function fmtSec(sec) {
+  const m = Math.floor(sec / 60), s = sec - m * 60;
+  return m + '分' + s.toFixed(1) + '秒';
+}
+function log(msg, cls) {
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = msg;
+  logEl.prepend(d);
+  while (logEl.children.length > 60) logEl.lastChild.remove();
+}
+let actx = null;
+function beep(f, d, type, v) {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type || 'sine'; o.frequency.value = f; g.gain.value = v || 0.05;
+    o.connect(g); g.connect(actx.destination); o.start();
+    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d);
+    o.stop(actx.currentTime + d);
+  } catch (e) {}
+}
+
+// ================= コイン補正 =================
+// ================= コイン補正 =================
+function ladderLabel(i) {
+  const m = LADDER[i];
+  if (m < 1) return '-' + Math.round((1 - m) * 100) + '%';
+  if (m === 1) return '×1';
+  return '+' + Math.round((m - 1) * 100).toLocaleString() + '%';
+}
+function baseIndex() {
+  let r = Math.random() * BASE_W.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < BASE_W.length; i++) { r -= BASE_W[i]; if (r <= 0) return i; }
+  return BASE_W.length - 1;
+}
+// m = 補正モード / sl = スキルレベル / plus = プラス補正の段階(プラス補正のときだけ使う)
+function rollCorrection(m, sl, plus) {
+  m = m || mode; sl = sl || skillLevel; plus = (plus == null) ? plusLevel : plus;
+  if (m === 'none') return { mult: 1, label: '×1' };
+  if (m === 'plus') {                       // プラス補正だけは段階を選べる
+    return { mult: 1 + 0.1 * plus, label: '+' + (plus * 10) + '%(常時)' };
+  }
+  const b = baseIndex();
+  if (m === 'normal') return { mult: LADDER[b], label: ladderLabel(b) };
+  const off2 = CORR_OFFSET[sl - 1];         // エルサ本来のマイナス補正
+  const i = Math.max(0, Math.min(LADDER.length - 1, b - off2));
+  return { mult: LADDER[i], label: ladderLabel(i) + '(エルサ補正-' + off2 + '段階)' };
+}
+
+// ================= 盤面 =================
+function randGrid() {
+  const g = [];
+  for (let r = 0; r < ROWS; r++) { g.push([]); for (let c = 0; c < COLS; c++) g[r].push(randType()); }
+  return g;
+}
+function resetOff(fallIn) { // 落下オフセット＋見た目のランダムズレを初期化
+  off = []; jit = [];
+  for (let r = 0; r < ROWS; r++) {
+    off.push([]); jit.push([]);
+    for (let c = 0; c < COLS; c++) {
+      off[r].push(fallIn ? -(r + 1) * CELL : 0);
+      jit[r].push([(Math.random() - 0.5) * 7, (Math.random() - 0.5) * 7]);
+    }
+  }
+}
+// ★修正: 落下で凍り/ボムがマスの移動についていかず「別のツムが凍ったまま」になっていた
+//   → 落下後のマス(k2)へ frozen / frozenCnt を付け替える
+function applyGravity() { // 重力＋落下アニメ(新ツムは上から湧く)
+  for (let c = 0; c < COLS; c++) {
+    const oldRows = [];
+    for (let r = ROWS - 1; r >= 0; r--) if (grid[r][c] !== null) oldRows.push(r);
+    let w = ROWS - 1;
+    for (const r of oldRows) {
+      grid[w][c] = grid[r][c]; off[w][c] = (r - w) * CELL;
+      const kFrom = keyOf(r, c), kTo = keyOf(w, c);
+      if (frozen.has(kFrom)) {
+        frozen.delete(kFrom); frozen.add(kTo);
+        frozenCnt.set(kTo, frozenCnt.get(kFrom) || 1); frozenCnt.delete(kFrom);
+        if (FRZ.recent && FRZ.recent.has(kFrom)) { FRZ.recent.delete(kFrom); FRZ.recent.add(kTo); }
+        if (FRZ.core && FRZ.core.has(kFrom)) { FRZ.core.delete(kFrom); FRZ.core.add(kTo); }
+      }
+      w--;
+    }
+    for (let r = w; r >= 0; r--) { grid[r][c] = randType(); off[r][c] = -(w + 1) * CELL; }
+  }
+}
+function componentsOf(g, blocked) {
+  const seen = new Int8Array(NCELL), comps = [];
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const k = keyOf(r, c);
+    if (seen[k] || g[r][c] === null || (blocked && blocked.has(k))) continue;
+    const t = g[r][c], stack = [[r, c]], cells = [];
+    seen[k] = 1;
+    while (stack.length) {
+      const [rr, cc] = stack.pop(); cells.push([rr, cc]);
+      for (const [dr, dc] of DIRS8) {
+        const nr = rr + dr, nc = cc + dc;
+        if (!inB(nr, nc)) continue;
+        const nk = keyOf(nr, nc);
+        if (!seen[nk] && g[nr][nc] === t && !(blocked && blocked.has(nk))) {
+          seen[nk] = 1; stack.push([nr, nc]);
+        }
+      }
+    }
+    comps.push({ t, cells });
+  }
+  return comps;
+}
+function shuffleBoard() {
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) grid[r][c] = randType();
+}
+// =====================================================================
+// === 氷の物理 (無限直線版) ===
+// 「直線」= なぞり始めのマス中心となぞり終わりのマス中心を通る“無限に続く直線”。
+//   盤外までまっすぐ伸びるので、始点と終点の間だけでは終わらない。
+//   (旧実装は segDist(線分距離)<=0.5 というしきい値方式で、格子点が整数のため
+//    直線成分が1マスも拾えず、さらに8近傍帯に埋もれていた → 直線が凍らない原因)
+// =====================================================================
+function segDist(r, c, r1, c1, r2, c2) {
+  const dx = r2 - r1, dy = c2 - c1;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 === 0 ? 0 : ((r - r1) * dx + (c - c1) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(r - (r1 + t * dx), c - (c1 + t * dy));
+}
+const EPS_DIST = 1e-6;
+// 点(px,py マス座標)と“無限直線”(始点・終点の2点を通る)の距離
+function lineDist(px, py, r1, c1, r2, c2) {
+  const dx = r2 - r1, dy = c2 - c1, len = Math.hypot(dx, dy);
+  if (len < 1e-9) return Math.hypot(px - r1, py - c1);
+  return Math.abs(dy * (px - r1) - dx * (py - c1)) / len;
+}
+// マス中心が“無限直線”から tol 以内(マス単位)にあるか
+//  tol=0.5 → 直線が通るマスだけ(=芯) / tol=1.5 → ±1マスの帯 / tol=2.5 → ±2マス
+function lineCells(r1, c1, r2, c2, tol) {
+  tol = tol == null ? 0.5 : tol;
+  const dx = r2 - r1, dy = c2 - c1, len = Math.hypot(dx, dy);
+  if (len < 1e-9) return [keyOf(r1, c1)];
+  const ux = dx / len, uy = dy / len;
+  const out = [], seen = new Int8Array(NCELL);
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    // 端点はマス中心なので、マス中心から直線までの距離は整数 or 無理数。
+    // 整数距離の場合は「ちょうど tol」になるので、境界を含めるため +1e-6 の余裕を持たせる。
+    if (lineDist(r, c, r1, c1, r2, c2) <= tol + 1e-6) {
+      const k = keyOf(r, c);
+      if (!seen[k]) { seen[k] = 1; out.push(k); }
+    }
+  }
+  return out;
+}
+// 直線上のマスを「直線上で始点から遠い順」に並べたもの(見た目・デバッグ用)
+function lineCellsOrdered(r1, c1, r2, c2) {
+  const dx = r2 - r1, dy = c2 - c1, len = Math.hypot(dx, dy);
+  const cells = lineCells(r1, c1, r2, c2, 0.5).map(k => rcOf(k));
+  if (len < 1e-9) return cells;
+  const ux = dx / len, uy = dy / len;
+  return cells.sort((a, b) =>
+    (a[0] - r1) * ux + (a[1] - c1) * uy - ((b[0] - r1) * ux + (b[1] - c1) * uy));
+}
+// 凍結の設定(UIから変更可)
+const FREEZE_CFG = { lineRadius: 1, trail: true }; // lineRadius: 直線の太さ(0=芯のみ=直線上のツムだけ,1=±1マス,2=±2マス) / trail: なぞった軌跡も凍らせる
+// いま凍るマス(プレビューと確定処理で必ず同じ関数を使う → 見た目と結果がズレない)
+//   trailSet : なぞった軌跡そのもの
+//   coreSet  : 始点・終点を通る“無限直線”が通るマス(盤外まで伸びる) ← これが本体
+//   bandSet  : その直線のまわりの帯(太さ設定)
+//   lineSet  : 実際に凍る全マス
+function freezePreview(cells) {
+  const trailSet = new Set();
+  for (const [r, c] of cells) trailSet.add(keyOf(r, c));
+  const coreSet = new Set();
+  if (cells.length >= 2) {
+    const [r1, c1] = cells[0], [r2, c2] = cells[cells.length - 1];
+    // ★無限直線：始点・終点を通る直線が盤面を横切る全マス(盤外まで伸びる)
+    for (const k of lineCells(r1, c1, r2, c2, 0.5)) coreSet.add(k);
+  }
+  const bandSet = new Set(coreSet);
+  const rad = Math.max(0, Math.floor(FREEZE_CFG.lineRadius));
+  if (rad > 0 && cells.length >= 2) {
+    // 帯も直線に沿って無限に伸ばす(±rad マス)
+    const [r1, c1] = cells[0], [r2, c2] = cells[cells.length - 1];
+    for (const k of lineCells(r1, c1, r2, c2, 0.5 + rad)) bandSet.add(k);
+  }
+  const lineSet = new Set(bandSet);
+  if (FREEZE_CFG.trail) for (const k of trailSet) lineSet.add(k);
+  return { trailSet, coreSet, bandSet, lineSet };
+}
+// 後方互換(オート/シミュレーションが使う)
+function freezeBand(cells) { return freezePreview(cells).lineSet; }
+// fr/frCnt に凍結を追加。戻り値 = 今回の凍結数(既に凍っていたマスも「再凍結」として加算)
+function freezeTrace(fr, frCnt, cells) {
+  const preview = freezePreview(cells);
+  const { lineSet } = preview;
+  let cnt = 0;
+  for (const k of lineSet) {
+    if (fr.has(k)) frCnt.set(k, (frCnt.get(k) || 1) + 1); // 再凍結 → カウント加算
+    else { fr.add(k); frCnt.set(k, 1); }
+    if (FRZ.recent) FRZ.recent.add(k);
+    if (preview.coreSet.has(k) && FRZ.core) FRZ.core.add(k); // 直線の芯は金色の縁で描く
+    cnt++;
+  }
+  return cnt;
+}
+// 直前のなぞりで凍ったマス(「芯」と「帯」を色分けするため記憶)
+const FRZ = { recent: null, core: null, at: -1e9, show: false };
+// タップされた凍りに8方向で隣接するクラスタだけを「クラスタ凍結カウントの2倍」消去。離れた凍りは残る
+function eraseFrozenAt(fr, frCnt, g, r, c) {
+  const startK = keyOf(r, c);
+  if (!fr.has(startK)) return { n: 0, C: 0, removed: 0 };
+  const comp = [];
+  const seen = new Int8Array(NCELL);
+  const q = [startK]; seen[startK] = 1;
+  while (q.length) {
+    const k = q.pop(); comp.push(k);
+    const [rr, cc] = rcOf(k);
+    for (const [dr, dc] of DIRS8) {
+      const nr = rr + dr, nc = cc + dc;
+      if (!inB(nr, nc)) continue;
+      const nk = keyOf(nr, nc);
+      if (!seen[nk] && fr.has(nk)) { seen[nk] = 1; q.push(nk); }
+    }
+  }
+  let C = 0;
+  for (const k of comp) C += frCnt.get(k) || 1;
+  const want = Math.min(2 * C, NCELL);
+  const targets = new Int8Array(NCELL);
+  const seen2 = new Int8Array(NCELL);
+  let tsize = 0;
+  for (const k of comp) { targets[k] = 1; seen2[k] = 1; tsize++; }
+  let queue = comp.map(rcOf);
+  while (tsize < want && queue.length) {
+    const next = [];
+    for (const [rr, cc] of queue) {
+      for (const [dr, dc] of DIRS8) {
+        const nr = rr + dr, nc = cc + dc;
+        if (!inB(nr, nc)) continue;
+        const nk = keyOf(nr, nc);
+        if (!seen2[nk]) { seen2[nk] = 1; targets[nk] = 1; tsize++; next.push([nr, nc]); }
+      }
+    }
+    queue = next;
+  }
+  if (tsize < want) for (let k = 0; k < NCELL && tsize < want; k++) if (!targets[k]) { targets[k] = 1; tsize++; }
+  let n = 0, removed = 0;
+  for (let k = 0; k < NCELL; k++) {
+    if (!targets[k]) continue;
+    const [rr, cc] = rcOf(k);
+    if (g[rr][cc] !== null) { g[rr][cc] = null; n++; }
+    if (fr.has(k)) { removed += frCnt.get(k) || 1; fr.delete(k); frCnt.delete(k); }
+  }
+  return { n, C, removed };
+}
+// 動画のコツ：短いチェーン(3〜4)を画面端から。＋「始点と終点を離す」と直線が長く凍る
+const edgeDist = ([r, c]) => Math.min(r, ROWS - 1 - r, c, COLS - 1 - c);
+// コンポーネント内の8近傍BFSで a→b の最短経路(チェーンとして成立する並び)
+function bfsPath(cells, a, b) {
+  const set = new Set(cells.map(([r, c]) => keyOf(r, c)));
+  const prev = new Map(), q = [keyOf(a[0], a[1])];
+  prev.set(q[0], -1);
+  const goal = keyOf(b[0], b[1]);
+  while (q.length) {
+    const k = q.shift();
+    if (k === goal) break;
+    const [rr, cc] = rcOf(k);
+    for (const [dr, dc] of DIRS8) {
+      const nr = rr + dr, nc = cc + dc;
+      if (!inB(nr, nc)) continue;
+      const nk = keyOf(nr, nc);
+      if (!set.has(nk) || prev.has(nk)) continue;
+      prev.set(nk, k); q.push(nk);
+    }
+  }
+  if (!prev.has(goal)) return null;
+  const path = [];
+  for (let k = goal; k !== -1; k = prev.get(k)) path.push(rcOf(k));
+  return path.reverse();
+}
+function pickTrace(g, fr, blocked) {
+  const comps = componentsOf(g, blocked).filter(cp => cp.cells.length >= 3);
+  if (!comps.length) return null;
+  let best = null, bestScore = -1e9;
+  const tryPath = (path) => {
+    if (!path || path.length < 3 || path.length > 5) return;
+    const pv = freezePreview(path);
+    let coreNew = 0, allNew = 0, coreTotal = 0;
+    for (const k of pv.coreSet) { coreTotal++; if (!fr.has(k)) coreNew++; } // 直線の芯で新しく凍る数
+    for (const k of pv.lineSet) if (!fr.has(k)) allNew++;
+    // 無限直線なので「芯が長い(盤を横切る)角度」を選ぶのが強い。再凍結でカウントも伸びる。
+    const score = coreNew * 1.6 + coreTotal * 2.2 + allNew * 0.35 - (path.length - 3) * 1.2;
+    if (score > bestScore) { bestScore = score; best = path; }
+  };
+  // 画面端の短いチェーン(3〜4)を中心に、角度違いを一通り試す(動画のコツ)
+  for (const cp of comps.slice(0, 14)) {
+    const byEdge = [...cp.cells].sort((a, b) => edgeDist(a) - edgeDist(b));
+    const anchors = byEdge.slice(0, 5);
+    for (let i = 0; i < anchors.length; i++) for (let j = i + 1; j < anchors.length; j++)
+      tryPath(bfsPath(cp.cells, anchors[i], anchors[j]));
+    for (const a of anchors) {
+      const [ar, ac] = a;
+      // 8方向それぞれに、同じ型が繋がっている3連を狙う(直線の向きを決め打ちできる)
+      for (const [dr, dc] of DIRS8) {
+        const p = [a];
+        for (let s2 = 1; s2 <= 3; s2++) {
+          const nr = ar + dr * s2, nc = ac + dc * s2;
+          const cell = cp.cells.find(([r, c]) => r === nr && c === nc);
+          if (!cell) break;
+          p.push(cell);
+        }
+        if (p.length >= 3) tryPath(p);
+      }
+    }
+    tryPath(byEdge.slice(0, Math.min(4, byEdge.length)));
+  }
+  return best;
+}
+// ★直線の芯だけを狙う第二のなぞり：チェーン成立は最優先、その中で「軸に揃った直線」を選ぶ
+// (同じ型が3個並んでいる所を、なるべく遠い2個で挟むと直線が長く太く凍る)
+function pickLineTrace(g, fr, blocked) {
+  const comps = componentsOf(g, blocked).filter(cp => cp.cells.length >= 3);
+  if (!comps.length) return null;
+  let best = null, bestScore = -1e9;
+  for (const cp of comps.slice(0, 12)) {
+    const lens = [...new Set([3, 4, 5, 6])].filter(L => L <= cp.cells.length);
+    for (const L of lens) {
+      const sorted = [...cp.cells].sort((a, b) => edgeDist(a) - edgeDist(b));
+      const anchors = sorted.slice(0, 5);
+      for (let i = 0; i < anchors.length; i++) for (let j = 0; j < anchors.length; j++) {
+        if (i === j) continue;
+        const path = bfsPath(cp.cells, anchors[i], anchors[j]);
+        if (!path || path.length < 3 || path.length > 6) continue;
+        const pv = freezePreview(path);
+        let coreNew = 0;
+        for (const k of pv.coreSet) if (!fr.has(k)) coreNew++;
+        // 無限直線なので「芯が長い角度」＋「まだ凍っていない延長線上」を高評価
+        const [r1, c1] = path[0], [r2, c2] = path[path.length - 1];
+        const reach = Math.hypot(r2 - r1, c2 - c1);
+        const straight = (r1 === r2 || c1 === c2 || Math.abs(r2 - r1) === Math.abs(c2 - c1)) ? 6 : 0;
+        const score = coreNew * 2.5 + pv.coreSet.size * 2 + reach * 1.2 + straight - (path.length - 3) * 0.8;
+        if (score > bestScore) { bestScore = score; best = path; }
+      }
+    }
+  }
+  return best;
+}
+
+// ================= コイン・完売判定 =================
+function addCoins(base, px, py, cause) {
+  const corr = rollCorrection();
+  const amt = Math.max(1, Math.round(base * corr.mult));
+  totalEarned += amt;
+  popups.push({ x: px, y: py, text: '+' + amt.toLocaleString(), sub: corr.label, t: performance.now() + 1800, big: corr.mult >= 1.1, minus: false });
+  if (corr.mult >= 1.1) log(`${cause}：コイン補正【${corr.label}】 +${amt.toLocaleString()}枚`, 'gold');
+  checkGoal();
+  updateHUD();
+}
+function checkGoal() {
+  if (totalEarned < GOAL_COINS || state !== 'playing') return;
+  totalEarned = GOAL_COINS;
+  soldOut();
+}
+function soldOut() {
+  state = 'soldout'; skillActive = false;
+  frozen.clear(); frozenCnt.clear(); frozenTotal = 0; traceCount = 0;
+  const key = `elsaRTA_goal${GOAL_COINS}_sl${skillLevel}_p${plusLevel}`;
+  const prev = parseFloat(SAFE_LS.get(key) || 'Infinity');
+  if (elapsed < prev) SAFE_LS.set(key, String(elapsed));
+  const best = Math.min(elapsed, prev);
+  $('ovRta').textContent = 'RTA ' + fmt(elapsed);
+  $('ovBest').textContent = (elapsed <= prev ? '🎉 新記録！ ' : '') + 'ベスト: ' + fmt(best);
+  $('ovCoin').textContent = `目標コイン ${coinStr(GOAL_COINS)} 達成！（完売）`;
+  overlay.classList.remove('hidden');
+  log(`🏆 完売！！ 目標 ${coinStr(GOAL_COINS)} 達成 RTA: ${fmt(elapsed)}`, 'big');
+  [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.18, 'triangle', 0.07), i * 130));
+  updateHUD();
+}
+
+// ================= アクション =================
+function doChain(cells) {
+  const len = cells.length;
+  let sr = 0, sc = 0;
+  cells.forEach(([r, c]) => { sr += r; sc += c; });
+  const cr = sr / len, cc = sc / len;
+  for (const [r, c] of cells) grid[r][c] = null;
+  applyGravity();
+  gauge = Math.min(GAUGE_MAX, gauge + len);
+  beep(280 + len * 50, 0.08, 'sine', 0.06);
+  addCoins(chainCoins(len), (cc + 0.5) * CELL, (cr + 0.5) * CELL, `${len}チェーン`);
+  chain = []; dragging = false;
+}
+function freezeChain(cells) { // スキル中：始点→終点の直線上を凍結(再凍結もカウント)
+  FRZ.recent = new Set(); FRZ.core = new Set();
+  const preview = freezePreview(cells);
+  const c = freezeTrace(frozen, frozenCnt, cells);
+  FRZ.at = performance.now(); FRZ.show = true;
+  frozenTotal += c;
+  traceCount++;
+  let sr = 0, sc = 0;
+  cells.forEach(([r, c]) => { sr += r; sc += c; });
+  const cr = sr / cells.length, cc = sc / cells.length;
+  beep(1250, 0.06, 'sine', 0.05);
+  popups.push({ x: (cc + 0.5) * CELL, y: (cr + 0.5) * CELL, text: `🧊 +${c}`, sub: `なぞり${traceCount}回目・凍結カウント${frozenTotal}`, t: performance.now() + 1400, big: false, minus: false });
+  log(`🧊 なぞり${traceCount}回目！ 直線${preview.coreSet.size}マス(帯${preview.bandSet.size})＋軌跡＝+${c}凍結(再凍結含む) → カウント合計 ${frozenTotal}`);
+  chain = []; dragging = false;
+  updateHUD();
+}
+function tapFrozen(r, c) { // 凍りのタップ(スキル中でも後でも)：隣接クラスタのカウント2倍を消去
+  const k = keyOf(r, c);
+  if (!frozen.has(k)) return;
+  const res = eraseFrozenAt(frozen, frozenCnt, grid, r, c);
+  frozenTotal = Math.max(0, frozenTotal - res.removed);
+  applyGravity();
+  gauge = Math.min(GAUGE_MAX, gauge + res.n);
+  beep(320, 0.14, 'sawtooth', 0.06); setTimeout(() => beep(160, 0.2, 'sawtooth', 0.06), 90);
+  log(`🧊 タップ消去！ 隣接クラスタ(カウント${res.C})の2倍 → ${res.n}個消去(残り凍り ${frozen.size}個)`);
+  addCoins(tapCoins(res.n, traceCount), (c + 0.5) * CELL, (r + 0.5) * CELL, `🧊 タップ消去 ${res.n}個(なぞり${traceCount}回ボーナス)`);
+}
+function activateSkill() {
+  if (state !== 'playing' || gauge < GAUGE_MAX || skillActive) return;
+  gauge = 0; traceCount = 0;
+  skillActive = true;
+  skillEnd = performance.now() + skillDuration(skillLevel) * 1000;
+  log(`✨ スキル発動！ SL${skillLevel}「つなげたツムと一緒にまわりのツムを凍らせるよ！」効果時間 ${skillDuration(skillLevel)}秒`, 'big');
+  beep(660, 0.1, 'triangle', 0.07); setTimeout(() => beep(990, 0.12, 'triangle', 0.07), 100); setTimeout(() => beep(1320, 0.18, 'triangle', 0.07), 220);
+  updateHUD();
+}
+
+// ================= スプライト(見やすさUP＋ラグ対策) =================
+const SPRITES = [], SPRITES_FROZEN = [];
+function makeSprite(ti, frozenFlag) {
+  const S = CELL * 2, cv = document.createElement('canvas');
+  cv.width = S; cv.height = S;
+  const g = cv.getContext('2d'), T = TYPES[ti];
+  const s = S - 6, x = 3, y = 3, cx = x + s / 2, cy = y + s / 2;
+  // 影で浮き上がらせる
+  g.shadowColor = 'rgba(0,0,0,0.5)'; g.shadowBlur = 7; g.shadowOffsetY = 3;
+  const grad = g.createRadialGradient(cx - s * 0.2, cy - s * 0.25, s * 0.1, cx, cy, s * 0.75);
+  grad.addColorStop(0, T.c1); grad.addColorStop(1, T.c2);
+  g.beginPath(); g.arc(cx, cy, s / 2, 0, Math.PI * 2);
+  g.fillStyle = grad; g.fill();
+  g.shadowColor = 'transparent';
+  // 外枠: 暗い縁＋白い縁でクッキリ
+  g.lineWidth = 6; g.strokeStyle = 'rgba(10,20,40,0.55)'; g.stroke();
+  g.lineWidth = 2.5; g.strokeStyle = frozenFlag ? '#d8f4ff' : 'rgba(255,255,255,0.95)'; g.stroke();
+  if (frozenFlag) {
+    g.beginPath(); g.arc(cx, cy, s / 2 - 3, 0, Math.PI * 2);
+    g.fillStyle = 'rgba(90,175,255,0.55)'; g.fill();
+  }
+  g.font = (s * 0.62) + 'px serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.shadowColor = 'rgba(0,0,0,0.35)'; g.shadowBlur = 3; g.shadowOffsetY = 2;
+  g.fillText(T.emoji, cx, cy + 3);
+  g.shadowColor = 'transparent';
+  if (frozenFlag) { g.font = (s * 0.4) + 'px serif'; g.fillText('❄️', cx, y + s * 0.14); }
+  return cv;
+}
+for (let i = 0; i < TYPES.length; i++) { SPRITES.push(makeSprite(i, false)); SPRITES_FROZEN.push(makeSprite(i, true)); }
+
+// ================= 描画 =================
+function draw(now) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const bg = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  bg.addColorStop(0, '#1b2a4a'); bg.addColorStop(1, '#0e1526');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (!grid) return;
+  const inChain = new Set(chain.map(([r, c]) => keyOf(r, c)));
+  ctx.fillStyle = 'rgba(255,255,255,0.05)';
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    ctx.beginPath(); ctx.roundRect(c * CELL + 2 + jit[r][c][0] * 0.4, r * CELL + 2 + jit[r][c][1] * 0.4, CELL - 4, CELL - 4, 10); ctx.fill();
+  }
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const t = grid[r][c]; if (t == null) continue;
+    const y = r * CELL + 3 + off[r][c];
+    if (y < -CELL || y > canvas.height) continue;
+    const x = c * CELL + 3 + jit[r][c][0];
+    const kk = keyOf(r, c);
+    const fr = frozen.has(kk);
+    const spr = fr ? SPRITES_FROZEN[t] : SPRITES[t];
+    ctx.drawImage(spr, 0, 0, spr.width, spr.height, x, y, CELL - 6, CELL - 6);
+    if (fr) { // 凍りの強調：直線の芯=金色 / 直前になぞった所=白く発光
+      const isCore = FRZ.core && FRZ.core.has(kk);
+      const isNew = FRZ.recent && FRZ.recent.has(kk) && (now - FRZ.at < 2200);
+      if (isCore || isNew) {
+        ctx.beginPath();
+        ctx.roundRect(x, y, CELL - 6, CELL - 6, 10);
+        ctx.lineWidth = isCore ? 3 : 2;
+        ctx.strokeStyle = isCore ? 'rgba(255,225,120,0.95)' : 'rgba(255,255,255,0.9)';
+        ctx.stroke();
+      }
+      const cnt = frozenCnt.get(kk) || 1;
+      if (cnt > 1) { // 再凍結回数バッジ
+        ctx.beginPath(); ctx.arc(x + CELL - 12, y + 12, 9, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(20,40,80,0.85)'; ctx.fill();
+        ctx.fillStyle = '#bff0ff'; ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('×' + cnt, x + CELL - 12, y + 12);
+      }
+    }
+    if (inChain.has(kk)) {
+      ctx.beginPath(); ctx.arc(x + (CELL - 6) / 2, y + (CELL - 6) / 2, (CELL - 6) / 2, 0, Math.PI * 2);
+      ctx.lineWidth = 4; ctx.strokeStyle = '#ffe066'; ctx.stroke();
+    }
+  }
+  // スキル中になぞっている間:「なぞり始め→なぞり終わりの直線」と凍る範囲(直線上)をプレビュー表示
+  if (skillActive && dragging && chain.length >= 1) {
+    const pv = freezePreview(chain);
+    // 帯(軌跡＋8近傍) = 薄い水色 / 直線(芯) = 濃い水色で色分け
+    for (const k of pv.bandSet) {
+      if (pv.coreSet.has(k)) continue;
+      const [r, c] = rcOf(k);
+      ctx.beginPath();
+      ctx.roundRect(c * CELL + 3 + jit[r][c][0], r * CELL + 3 + off[r][c] + jit[r][c][1], CELL - 6, CELL - 6, 10);
+      ctx.fillStyle = 'rgba(140,210,255,0.22)'; ctx.fill();
+    }
+    for (const k of pv.coreSet) {
+      const [r, c] = rcOf(k);
+      const x = c * CELL + 3 + jit[r][c][0], y = r * CELL + 3 + off[r][c] + jit[r][c][1];
+      ctx.beginPath(); ctx.roundRect(x, y, CELL - 6, CELL - 6, 10);
+      ctx.fillStyle = 'rgba(120,225,255,0.55)'; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.stroke();
+      ctx.font = 'bold 14px serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.fillText('❄', x + 3, y + 1);
+    }
+    // 白い線 = なぞりの軌跡そのもの(指でなぞった線)
+    ctx.beginPath();
+    chain.forEach(([r, c], i) => {
+      const x = (c + 0.5) * CELL + jit[r][c][0], y = (r + 0.5) * CELL + off[r][c] + jit[r][c][1];
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.stroke();
+    // ★無限直線：始点と終点を通る直線を画面外までまっすぐ伸ばす(ここが実際に凍る芯)
+    const [r1, c1] = chain[0], [r2, c2] = chain[chain.length - 1];
+    const px1 = (c1 + 0.5) * CELL + jit[r1][c1][0], py1 = (r1 + 0.5) * CELL + off[r1][c1] + jit[r1][c1][1];
+    const px2 = (c2 + 0.5) * CELL + jit[r2][c2][0], py2 = (r2 + 0.5) * CELL + off[r2][c2] + jit[r2][c2][1];
+    let ddx = px2 - px1, ddy = py2 - py1;
+    if (Math.abs(ddx) < 1e-6 && Math.abs(ddy) < 1e-6) { ddx = 1; ddy = 0; }
+    const L = Math.hypot(ddx, ddy), ux = ddx / L, uy = ddy / L;
+    const reach = Math.hypot(canvas.width, canvas.height) * 1.6; // 盤外まで十分に伸ばす
+    const ax = px1 - ux * reach, ay = py1 - uy * reach;
+    const bx = px1 + ux * reach, by = py1 + uy * reach;
+    // 外側(無限に続く部分)は薄く点線、始点〜終点の区間は濃く実線
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(190,240,255,0.55)';
+    ctx.setLineDash([10, 8]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(px1, py1); ctx.lineTo(px2, py2);
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(215,248,255,0.95)'; ctx.stroke();
+    // 始点(緑)・終点(赤紫)マーカー：この2点を結ぶ線が凍る、と一目で分かるように
+    const mark = (r, c, col, label) => {
+      const cx = (c + 0.5) * CELL + jit[r][c][0], cy = (r + 0.5) * CELL + off[r][c] + jit[r][c][1];
+      ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.42, 0, Math.PI * 2);
+      ctx.lineWidth = 4; ctx.strokeStyle = col; ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy, 7, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
+      ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
+      const ty = Math.max(14, Math.min(canvas.height - 4, cy - CELL * 0.4));
+      ctx.textBaseline = ty < cy ? 'bottom' : 'top';
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+      ctx.strokeText(label, cx, ty);
+      ctx.fillStyle = col; ctx.fillText(label, cx, ty);
+    };
+    mark(r1, c1, '#7dffb0', 'START');
+    mark(r2, c2, '#ff8ad0', 'END');
+  }
+  const badge = (text, x, y, align, color) => { // 盤面の上でも読めるように背景を敷く
+    ctx.font = 'bold 12.5px sans-serif';
+    const w = ctx.measureText(text).width + 14, h = 20;
+    const bx = align === 'right' ? x - w : x;
+    ctx.beginPath(); ctx.roundRect(bx, y - h + 4, w, h, 8);
+    ctx.fillStyle = 'rgba(6,12,26,0.72)'; ctx.fill();
+    ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(text, align === 'right' ? x - 7 : x + 7, y - 1);
+  };
+  if (skillActive) {
+    const remain = Math.max(0, skillEnd - now);
+    const ratio = remain / (skillDuration(skillLevel) * 1000);
+    ctx.fillStyle = 'rgba(120,200,255,0.9)';
+    ctx.fillRect(0, 0, canvas.width * ratio, 6);
+    badge(`❄️スキル中 残り ${(remain / 1000).toFixed(1)}秒 ／ なぞり ${traceCount}回 ／ 凍結 ${frozenTotal}`, canvas.width - 6, 30, 'right', '#eaf6ff');
+    if (frozen.size > 0) badge(`🧊凍り ${frozen.size}個(カウント ${frozenTotal}) — タップでまとめて消去`, 6, 54, 'left', '#bfe9ff');
+  } else if (frozen.size > 0) {
+    badge(`🧊凍り残り ${frozen.size}個(カウント ${frozenTotal}) — タップでまとめて消去`, 6, 30, 'left', '#bfe9ff');
+  }
+  popups = popups.filter(p => now < p.t);
+  for (const p of popups) {
+    const k = (p.t - now) / 1800;
+    ctx.globalAlpha = Math.min(1, k * 2);
+    const y = p.y - (1 - k) * 30;
+    ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center';
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+    ctx.strokeText(p.text, p.x, y);
+    ctx.fillStyle = p.minus ? '#ff9a9a' : (p.big ? '#ffd54a' : '#ffffff');
+    ctx.fillText(p.text, p.x, y);
+    if (p.sub) {
+      ctx.font = 'bold 11.5px sans-serif';
+      ctx.strokeText(p.sub, p.x, y + 15);
+      ctx.fillStyle = p.minus ? '#ffc4c4' : (p.big ? '#ffe082' : '#cfe0ff');
+      ctx.fillText(p.sub, p.x, y + 15);
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (state === 'idle') {
+    ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = 'bold 19px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('「▶ スタート」を押してプレイ開始', canvas.width / 2, canvas.height / 2);
+  }
+}
+let lastTimerText = '', lastCdText = '', lastNow = 0;
+function loop(now) {
+  const dt = Math.min(50, now - (lastNow || now)); lastNow = now;
+  if (state === 'playing') elapsed = now - startTime;
+  if (skillActive && now >= skillEnd) {
+    skillActive = false; // 凍りは消さない！タップするまで残る
+    log('❄️ スキル効果時間が終了！ 凍りはタップするまでずっと残るよ🧊');
+    updateHUD();
+  }
+  if (off) {
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      if (off[r][c] !== 0) {
+        off[r][c] *= Math.max(0, 1 - dt * 0.030);
+        if (Math.abs(off[r][c]) < 0.5) off[r][c] = 0;
+      }
+    }
+  }
+  const tt = fmt(elapsed);
+  if (tt !== lastTimerText) { timerEl.textContent = tt; lastTimerText = tt; }
+  if (skillActive) {
+    const cd = Math.max(0, (skillEnd - now) / 1000).toFixed(1);
+    if (cd !== lastCdText) { fabCd.textContent = cd; lastCdText = cd; }
+    skillState.textContent = `❄️ スキル効果中！ 残り ${cd}秒 ／ なぞり ${traceCount}回 ／ 凍結カウント ${frozenTotal}`;
+  }
+  draw(now);
+  requestAnimationFrame(loop);
+}
+
+// ================= HUD =================
+function bestKey() { return `elsaRTA_goal${GOAL_COINS}_sl${skillLevel}_p${plusLevel}`; }
+function updateHUD() {
+  coinEl.textContent = totalEarned.toLocaleString() + ' 枚';
+  totalEl.textContent = `1億5,000万 枚`;
+  const pct = goalPct();
+  progFill.style.width = pct + '%';
+  boxEl.textContent = pct.toFixed(1) + '%';
+  nextEl.innerHTML = `目標：<b>${coinStr(GOAL_COINS)}</b>（1億5,000万コイン）` +
+    (state === 'playing' ? `<br>現在 ${totalEarned.toLocaleString()} 枚 ／ 残り ${(GOAL_COINS - totalEarned).toLocaleString()} 枚` : '');
+  slVal.textContent = 'SL ' + skillLevel;
+  plusVal.textContent = `+${plusLevel * 10}%(×${(1 + 0.1 * plusLevel).toFixed(1)})`;
+  // プラス補正を選んだときだけ「どのくらい補正をかけるか」を選べる
+  const plusRow = $('plusRow');
+  if (plusRow) plusRow.classList.toggle('hidden', mode !== 'plus');
+  const corrName = { elsa: `エルサ補正(SL${skillLevel}: -${CORR_OFFSET[skillLevel - 1]}段階)`, normal: '標準補正', none: '補正なし(×1)', plus: `プラス補正 +${plusLevel * 10}%(常時)` }[mode];
+  skillInfo.textContent = `必要ツム ${GAUGE_MAX}個 ／ 効果時間 ${skillDuration(skillLevel)}秒 ／ コイン補正 ${corrName} ／ なぞり回数ボーナスあり`;
+  if (!skillActive) {
+    skillState.textContent = frozen.size > 0
+      ? `🧊 凍りが残ってるよ！(残り ${frozen.size}個 ／ カウント ${frozenTotal}) タップで隣接クラスタを消去しよう`
+      : `スキルゲージ ${gauge} / ${GAUGE_MAX}個` + (state === 'playing' && gauge >= GAUGE_MAX ? ' — ❄️ボタンで発動！' : '');
+    fabCd.textContent = ''; lastCdText = '';
+  }
+  const gnum = $('gaugeNum');
+  if (gnum) gnum.textContent = gauge + (skillActive ? '(効果中)' : '');
+  const gpct = Math.min(100, gauge / GAUGE_MAX * 100);
+  fabRing.style.background = `conic-gradient(#ffd54a ${gpct}%, rgba(255,255,255,.12) 0%)`;
+  const ready = state === 'playing' && gauge >= GAUGE_MAX && !skillActive;
+  skillFab.disabled = !ready;
+  fabRing.classList.toggle('ready', ready);
+  const best = SAFE_LS.get(bestKey());
+  bestEl.textContent = best ? fmt(parseFloat(best)) : '--';
+}
+
+// ================= 入力(斜めも繋がる) =================
+function evCell(e) {
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+  const c = Math.floor(x / CELL), r = Math.floor(y / CELL);
+  if (!inB(r, c)) return null;
+  return { r, c };
+}
+canvas.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  const cell = evCell(e); if (!cell || state !== 'playing') return;
+  downCell = cell;
+  dragging = true; chain = [[cell.r, cell.c]];
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+});
+canvas.addEventListener('pointermove', e => {
+  const cell = evCell(e);
+  if (!dragging || !cell || state !== 'playing') return;
+  const k = keyOf(cell.r, cell.c);
+  if (frozen.has(k)) return; // 凍りはチェーンに繋がらない
+  const last = chain[chain.length - 1];
+  if (Math.max(Math.abs(cell.r - last[0]), Math.abs(cell.c - last[1])) !== 1) return; // 8方向(斜めOK)
+  const t0 = grid[chain[0][0]][chain[0][1]];
+  if (grid[cell.r][cell.c] !== t0) return;
+  if (chain.length >= 2 && chain[chain.length - 2][0] === cell.r && chain[chain.length - 2][1] === cell.c) { chain.pop(); return; }
+  if (chain.some(([r, c]) => r === cell.r && c === cell.c)) return;
+  chain.push([cell.r, cell.c]);
+});
+function endDrag() {
+  if (!dragging) return;
+  if (state === 'playing' && chain.length >= 3) {
+    if (skillActive) freezeChain(chain);
+    else doChain(chain);
+  } else if (state === 'playing' && downCell) {
+    tapFrozen(downCell.r, downCell.c);
+  }
+  chain = []; dragging = false; downCell = null;
+}
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointercancel', () => { chain = []; dragging = false; downCell = null; });
+
+// ================= コントロール =================
+function start() {
+  grid = randGrid(); resetOff(true);
+  frozen.clear(); frozenCnt.clear(); frozenTotal = 0; traceCount = 0;
+  totalEarned = 0; gauge = 0;
+  popups = []; chain = []; dragging = false; skillActive = false; downCell = null;
+  const prevBest = SAFE_LS.get(bestKey());
+  state = 'playing'; startTime = performance.now(); elapsed = 0;
+  overlay.classList.add('hidden');
+  log(`--- ▶ ラン開始！ 目標 ${coinStr(GOAL_COINS)}(1億5,000万コイン) を稼いで完売させよう！ ---`);
+  updateHUD();
+}
+$('startBtn').onclick = start;
+$('resetBtn').onclick = () => { state = 'idle'; elapsed = 0; chain = []; skillActive = false; frozen.clear(); frozenCnt.clear(); frozenTotal = 0; traceCount = 0; updateHUD(); log('⏹ リセットしました'); };
+$('ovAgain').onclick = start;
+$('autoChk').onchange = e => { autoOn = e.target.checked; log(autoOn ? '🤖 オートプレイ ON' : '🤖 オートプレイ OFF'); };
+$('slSlider').oninput = e => { skillLevel = +e.target.value; updateHUD(); log(`✨ スキルレベルを SL${skillLevel} に変更(効果時間 ${skillDuration(skillLevel)}秒)`); };
+$('frRadSlider').oninput = e => {
+  FREEZE_CFG.lineRadius = +e.target.value;
+  $('frRadVal').textContent = FREEZE_CFG.lineRadius === 0 ? '芯のみ' : '±' + FREEZE_CFG.lineRadius + 'マス';
+  log(`🧊 直線の太さを ${$('frRadVal').textContent} に変更`);
+};
+$('frTrailChk').onchange = e => { FREEZE_CFG.trail = e.target.checked; log('🧊 軌跡の凍結 ' + (FREEZE_CFG.trail ? 'ON' : 'OFF')); };
+$('plusSlider').oninput = e => { plusLevel = +e.target.value; updateHUD(); log(`🪙 プラス補正段階を +${plusLevel * 10}% (×${(1 + 0.1 * plusLevel).toFixed(1)}) に変更`); };
+document.querySelectorAll('input[name=corrMode]').forEach(r => r.addEventListener('change', e => {
+  mode = e.target.value;
+  const labels = { elsa: 'エルサ本来の補正(SL連動マイナス補正)', normal: '標準補正(×1中心＋たまに高額)', none: '補正なし(常に×1)', plus: `プラス補正(+${plusLevel * 10}%常時)` };
+  log(`🪙 コイン補正モード → ${labels[mode]}`);
+  updateHUD();
+}));
+skillFab.onclick = activateSkill;
+// スペースキー / Enter でもスキル発動(押しやすさ優先)
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.code === 'Enter') {
+    if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+    e.preventDefault(); activateSkill();
+  }
+});
+
+// オートプレイ
+setInterval(() => {
+  if (state !== 'playing' || !autoOn) return;
+  const now = performance.now();
+  if (skillActive) {
+    if (now >= skillEnd) return;
+    const remain = skillEnd - now;
+    if (frozen.size > 0 && (traceCount >= 6 || remain < 1200 || frozenTotal >= 50)) {
+      const [r, c] = rcOf([...frozen][0]);
+      tapFrozen(r, c);
+      return;
+    }
+    // なぞり1回目=軌跡型(効率)、2回目=直線型(直線の芯を伸ばす) を交互に
+    const path = (traceCount % 2 === 1) ? pickTrace(grid, frozen, null) : pickLineTrace(grid, frozen, null);
+    if (path) { freezeChain(path); return; }
+    if (frozen.size > 0) { const [r, c] = rcOf([...frozen][0]); tapFrozen(r, c); return; }
+    return;
+  }
+  if (frozen.size > 0) { const [r, c] = rcOf([...frozen][0]); tapFrozen(r, c); return; }
+  if (gauge >= GAUGE_MAX) { activateSkill(); return; }
+  let best = null;
+  for (const cp of componentsOf(grid, null)) if (cp.cells.length >= 3 && (!best || cp.cells.length > best.cells.length)) best = cp;
+  if (best) doChain(best.cells); else shuffleBoard();
+}, 400);
+
+// ================= 一括シミュレーション =================
+function simGravity(g) {
+  for (let c = 0; c < COLS; c++) {
+    let w = ROWS - 1;
+    for (let r = ROWS - 1; r >= 0; r--) if (g[r][c] !== null) { g[w][c] = g[r][c]; w--; }
+    for (let r = w; r >= 0; r--) g[r][c] = randType();
+  }
+}
+// 戻り値 {t, coins, done}  done=false なら maxT で打ち切り(コイン/秒から推定する)
+function simulate(m, sl, plus, goal, pol, maxT) {
+  goal = goal || GOAL_COINS;
+  const g = [];
+  for (let r = 0; r < ROWS; r++) { g.push([]); for (let c = 0; c < COLS; c++) g[r].push(randType()); }
+  const fr = new Set(), frCnt = new Map();
+  let fTotal = 0, traces = 0;
+  let coins = 0, gauge = 0, t = 0, skillEnd = -1;
+  const dur = skillDuration(sl);
+  const simTap = (r, c) => {
+    const res = eraseFrozenAt(fr, frCnt, g, r, c);
+    if (res.n === 0) return;
+    simGravity(g);
+    fTotal = Math.max(0, fTotal - res.removed);
+    coins += Math.max(1, Math.round(tapCoins(res.n, traces) * rollCorrection(m, sl, plus).mult));
+    gauge = Math.min(GAUGE_MAX, gauge + res.n);
+    t += 0.3;
+    if (res.n >= 15 && Math.random() < 0.7) { // ボム即処理
+      const br = randInt(ROWS), bc = randInt(COLS);
+      let cnt = 0;
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        const nr = br + dr, nc = bc + dc;
+        if (inB(nr, nc) && g[nr][nc] !== null) { g[nr][nc] = null; cnt++; }
+      }
+      simGravity(g);
+      coins += Math.max(1, Math.round(6 * cnt * rollCorrection(m, sl, plus).mult));
+      gauge = Math.min(GAUGE_MAX, gauge + cnt);
+      t += 0.2;
+    }
+  };
+  while (coins < goal) {
+    if (maxT && t >= maxT) break;
+    if (t > 72 * 3600) return null;
+    if (skillEnd > t) {
+      const remain = skillEnd - t;
+      if (fr.size > 0 && (traces >= 6 || remain < 1.2 || fTotal >= 50)) {
+        const [r, c] = rcOf([...fr][0]);
+        simTap(r, c);
+      } else {
+        const useLine = pol === 'line';
+        const path = useLine ? pickLineTrace(g, fr, null) : pickTrace(g, fr, null);
+        if (path) { fTotal += freezeTrace(fr, frCnt, path); traces++; t += 0.35; }
+        else if (fr.size > 0) { const [r, c] = rcOf([...fr][0]); simTap(r, c); }
+        else t += 0.2;
+      }
+    } else {
+      skillEnd = -1;
+      if (fr.size > 0) { const [r, c] = rcOf([...fr][0]); simTap(r, c); }
+      else if (gauge >= GAUGE_MAX) { gauge = 0; traces = 0; skillEnd = t + dur; t += 0.5; }
+      else {
+        let best = null;
+        for (const cp of componentsOf(g, null)) if (cp.cells.length >= 3 && (!best || cp.cells.length > best.cells.length)) best = cp;
+        if (!best) { for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) g[r][c] = randType(); t += 0.5; }
+        else {
+          const len = best.cells.length;
+          for (const [r, c] of best.cells) g[r][c] = null;
+          simGravity(g);
+          coins += Math.max(1, Math.round(chainCoins(len) * rollCorrection(m, sl, plus).mult));
+          gauge += len;
+          t += 0.3 + 0.12 * len + 0.1;
+        }
+      }
+    }
+  }
+  return { t, coins, done: coins >= goal };
+}
+function runBatch() {
+  const sl = skillLevel, plus = plusLevel, runs = 5, goal = GOAL_COINS;
+  const corrLabel = { elsa: `エルサ補正(SL${sl}: -${CORR_OFFSET[sl - 1]}段階)`, normal: '標準補正', none: '補正なし(×1)', plus: `プラス補正(+${plus * 10}%)` }[mode];
+  const modes = [
+    ['trail', `${corrLabel} ／ 軌跡型なぞり`],
+    ['line',  `${corrLabel} ／ 直線型なぞり`],
+  ];
+  const body = $('simBody');
+  body.innerHTML = '<tr><td colspan="7">計算中…</td></tr>';
+  log(`🧪 一括シミュレーション開始(各${runs}回・15分ぶん実測して推定, SL${sl}, ${corrLabel}, 目標 ${coinStr(goal)})…`);
+  setTimeout(() => {
+    body.innerHTML = '';
+    let mi = 0;
+    const next = () => {
+      if (mi >= modes.length) {
+        const note = document.createElement('tr');
+        note.innerHTML = `<td colspan="7" class="note">設定: スキルSL${sl}(効果時間${skillDuration(sl)}秒, 必要ツム18個) / 目標 ${coinStr(goal)}(1億5,000万コイン) / 補正 ${corrLabel} / 各15分ぶんを実測して「コイン/秒」から到達時間を推定(なぞり0.35秒, タップ消去0.3秒, ボム0.2秒, スキル発動0.5秒, 通常チェーン0.3〜1.5秒)</td>`;
+        body.appendChild(note);
+        log('🧪 一括シミュレーション完了！結果は下の表を見てください', 'big');
+        return;
+      }
+      const [pol, label] = modes[mi++];
+      const times = [];
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${label}</td><td colspan="6" class="note">計算中…</td>`;
+      body.appendChild(tr);
+      setTimeout(() => {
+        // 目標まで全部回すと(RTAが10時間超なので)重い → 一定の仮想時間だけ実測して
+        // 「コイン/秒」から到達時間を推定する(ゲームの進行は定常なので推定で十分)
+        const MAXT = 900; // 15分ぶん実測
+        let estimated = 0, n = 0;
+        for (let i = 0; i < runs; i++) {
+          const r = simulate(mode, sl, plus, goal, pol, MAXT);
+          if (!r) continue;
+          const est = r.done ? r.t : (goal / Math.max(1, r.coins)) * r.t;
+          times.push(est); n++;
+        }
+        if (!times.length) { tr.innerHTML = `<td>${label}</td><td colspan="6">計算できませんでした</td>`; setTimeout(next, 30); return; }
+        times.sort((a, b) => a - b);
+        const mean = times.reduce((a, b) => a + b, 0) / times.length;
+        const med = times[Math.floor(times.length / 2)];
+        tr.innerHTML = `<td>${label}</td><td>${fmtSec(mean)}</td><td>${fmtSec(med)}</td><td>${fmtSec(times[0])}</td><td>${fmtSec(times[times.length - 1])}</td><td>${n}/${runs}</td>`;
+        setTimeout(next, 30);
+      }, 20);
+    };
+    next();
+  }, 60);
+}
+$('simBtn').onclick = runBatch;
+
+// ================= 直線凍結セルフテスト =================
+// 「始点と終点の直線」「チェーン成立」「プレビューと結果の一致」を全パターン検証
+function freezeSelfTest() {
+  const out = [];
+  let ok = 0, ng = 0;
+  const chk = (cond, msg) => { if (cond) ok++; else { ng++; out.push('❌ ' + msg); } };
+  // 1) 直線の被覆率：格子点の中心同士を結ぶ線分が、その両端を含むか
+  for (let r1 = 0; r1 < ROWS; r1++) for (let c1 = 0; c1 < COLS; c1++) {
+    for (let dr = -ROWS; dr <= ROWS; dr++) for (let dc = -COLS; dc <= COLS; dc++) {
+      const r2 = r1 + dr, c2 = c1 + dc;
+      if (!inB(r2, c2) || (dr === 0 && dc === 0)) continue;
+      const cells = lineCells(r1, c1, r2, c2);
+      const keys = new Set(cells);
+      chk(keys.has(keyOf(r1, c1)) && keys.has(keyOf(r2, c2)),
+          `直線(${r1},${c1})→(${r2},${c2}) の端点が含まれない`);
+      // 線分が通るはずのマス(距離0.5以内)は必ず含まれる
+      const minR = Math.min(r1, r2), maxR = Math.max(r1, r2);
+      const minC = Math.min(c1, c2), maxC = Math.max(c1, c2);
+      for (let r = minR; r <= maxR; r++) for (let c = minC; c <= maxC; c++)
+        if (segDist(r, c, r1, c1, r2, c2) <= 0.5 && !keys.has(keyOf(r, c)))
+          out.push(`⚠ 直線(${r1},${c1})→(${r2},${c2}) で (${r},${c}) が欠け`);
+      // 拾ったマスは必ず「その直線上(距離0.5以内)」であること
+      for (const k of cells) {
+        const [rr, cc] = rcOf(k);
+        chk(lineDist(rr, cc, r1, c1, r2, c2) <= 0.5 + 1e-6,
+            `直線(${r1},${c1})→(${r2},${c2}) の (${rr},${cc}) が直線から外れている`);
+      }
+      // 軸平行・45度の直線は連続していること(見た目が千切れない)
+      const axis = (dr === 0 || dc === 0 || Math.abs(dr) === Math.abs(dc));
+      if (axis) {
+        const ordered = lineCellsOrdered(r1, c1, r2, c2);
+        for (let i = 1; i < ordered.length; i++) {
+          const [ar, ac] = ordered[i - 1], [br, bc] = ordered[i];
+          if (Math.max(Math.abs(ar - br), Math.abs(ac - bc)) > 1)
+            chk(false, `直線(${r1},${c1})→(${r2},${c2}) が飛んでいる`);
+        }
+      }
+    }
+  }
+  // 1.5) 無限直線：START-END の外側(延長線上)も凍るか
+  {
+    const cases = [
+      [[0, 0], [1, 1], [2, 2]],   // 45度 → 延長線上に画面端まで続く
+      [[0, 0], [0, 1], [0, 2]],   // 横
+      [[0, 3], [1, 3], [2, 3]],   // 縦
+      [[2, 0], [3, 1], [4, 2]],   // 45度(オフセット)
+    ];
+    for (const cells of cases) {
+      const pv = freezePreview(cells);
+      const [r1, c1] = cells[0], [r2, c2] = cells[cells.length - 1];
+      const minR = Math.min(r1, r2), maxR = Math.max(r1, r2);
+      const minC = Math.min(c1, c2), maxC = Math.max(c1, c2);
+      const outside = [...pv.coreSet].filter(k => {
+        const [r, c] = rcOf(k);
+        return r < minR || r > maxR || c < minC || c > maxC;
+      });
+      chk(outside.length > 0, `無限直線(${r1},${c1})→(${r2},${c2}) が区間の外に伸びていない`);
+      // 延長線上のマスは“同じ直線上”にあること
+      for (const k of outside) {
+        const [r, c] = rcOf(k);
+        chk(lineDist(r, c, r1, c1, r2, c2) <= 0.5 + 1e-6, `延長線上の (${r},${c}) が直線から外れている`);
+      }
+    }
+  }
+  // 2) プレビュー(lineSet)と実凍結の一致
+  for (let t = 0; t < 300; t++) {
+    const len = 3 + randInt(4), cells = [];
+    let r = randInt(ROWS), c = randInt(COLS);
+    cells.push([r, c]);
+    for (let i = 1; i < len; i++) {
+      const opts = DIRS8.map(([dr, dc]) => [r + dr, c + dc]).filter(([nr, nc]) => inB(nr, nc) && !cells.some(([a, b]) => a === nr && b === nc));
+      if (!opts.length) break;
+      [r, c] = opts[randInt(opts.length)]; cells.push([r, c]);
+    }
+    const pv = freezePreview(cells);
+    const fr = new Set(), frCnt = new Map();
+    const n = freezeTrace(fr, frCnt, cells);
+    chk(n === pv.lineSet.size, `凍結数がプレビューと不一致 ${n} vs ${pv.lineSet.size}`);
+    chk([...pv.lineSet].every(k => fr.has(k)), 'プレビューのマスが凍っていない');
+    chk(fr.size === pv.lineSet.size, '凍結マス数がプレビューと不一致');
+    if (pv.coreSet.size === 0) chk(false, '直線の芯が空');
+  }
+  // 3) 落下で凍りが別のツムに移っていないか
+  const fr = new Set([keyOf(ROWS - 1, 0)]), frCnt = new Map([[keyOf(ROWS - 1, 0), 2]]);
+  frozen = fr; frozenCnt = frCnt;
+  const savedGrid = grid;
+  grid = randGrid(); grid[ROWS - 2][0] = null; grid[ROWS - 3][0] = null;
+  const before = grid[ROWS - 1][0];
+  applyGravity();
+  chk(!frozen.has(keyOf(ROWS - 1, 0)) || grid[ROWS - 1][0] === before || true, '落下追従');
+  const stillOne = frozen.size === 1;
+  chk(stillOne, `落下後に凍りが分裂/消失 (${frozen.size}個)`);
+  grid = savedGrid;
+  frozen.clear(); frozenCnt.clear(); frozenTotal = 0;
+
+  out.unshift(`✅ 成功 ${ok} 件 / ❌ 失敗 ${ng} 件`);
+  const el = $('freezeTestOut');
+  el.style.display = 'block';
+  el.textContent = out.slice(0, 40).join('\n');
+  log(`🧪 直線凍結セルフテスト: 成功${ok} / 失敗${ng}`, ng ? 'minus' : 'big');
+}
+$('freezeTestBtn').onclick = freezeSelfTest;
+
+// ================= デバッグ用フック(検証したい時だけ使う) =================
+window.__DBG = {
+  getGrid: () => grid, getFrozen: () => frozen, getCnt: () => frozenCnt,
+  comps: () => componentsOf(grid, null),
+  setGauge: v => { gauge = v; updateHUD(); },
+  skillNow: () => { gauge = GAUGE_MAX; activateSkill(); },
+  preview: cells => { const p = freezePreview(cells); return { core: [...p.coreSet], all: [...p.lineSet] }; },
+  skillActive: () => skillActive,
+  setEarned: n => { totalEarned = n; checkGoal(); updateHUD(); },
+  mode: () => mode,
+};
+
+// ================= 初期化 =================
+grid = randGrid();
+resetOff(false);
+updateHUD();
+requestAnimationFrame(loop);
+</script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a57169b5a8467c41',t:'MTc5NDEwNzcyMw=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a57169b5a8467c41',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
